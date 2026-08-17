@@ -69,23 +69,34 @@ class EmergencyService {
     scenarioMessage: string,
     location: LocationResult | null,
     timestamp: number,
-    userInfo: { name: string, phone: string } | null,
+    userInfo: { name: string; phone: string; address?: string } | null,
   ): string {
     const when = new Date(timestamp).toLocaleString();
     const mapUrl = location
       ? `https://maps.google.com/?q=${location.lat},${location.lng}`
-      : 'Location unavailable';
-    
-    const identityString = userInfo ? ` from ${userInfo.name} (${userInfo.phone})` : '';
+      : null;
 
-    return [
-      `EMERGENCY ALERT${identityString}`,
-      scenarioMessage,
-      `Time: ${when}`,
-      `Location: ${location ? `${location.lat}, ${location.lng}` : 'Unavailable'}`,
-      `Map: ${mapUrl}`,
-      'This alert was sent automatically by the Emergency Response app.',
-    ].join('\n');
+    const lines: string[] = [
+      `🚨 EMERGENCY ALERT`,
+    ];
+
+    if (userInfo?.name) lines.push(`Person: ${userInfo.name}`);
+    if (userInfo?.phone) lines.push(`Phone: ${userInfo.phone}`);
+    if (userInfo?.address) lines.push(`Address: ${userInfo.address}`);
+    lines.push(`Situation: ${scenarioMessage}`);
+    lines.push(`Time: ${when}`);
+
+    if (location) {
+      lines.push(`GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`);
+      lines.push(`Map: ${mapUrl}`);
+    } else if (userInfo?.address) {
+      lines.push(`Location (manual): ${userInfo.address}`);
+    } else {
+      lines.push(`Location: Unavailable`);
+    }
+
+    lines.push(`Sent via Emergency Response App.`);
+    return lines.join('\n');
   }
 
   async notifyEmergencyContacts(
@@ -93,39 +104,57 @@ class EmergencyService {
     location: LocationResult | null,
     impactTimestamp: number,
   ): Promise<void> {
-    if (Platform.OS !== 'android' || !NativeModules.EmergencyModule?.sendEmergencySms) {
-      this.lastContactNotify = { total: 0, sent: 0, failed: 0 };
-      return;
-    }
-
     const contacts = await contactsService.getAll();
     if (!contacts.length) {
       this.lastContactNotify = { total: 0, sent: 0, failed: 0 };
       return;
     }
 
-    let userInfo = null;
+    let userInfo: { name: string; phone: string; address?: string } | null = null;
     try {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       const stored = await AsyncStorage.getItem('@ers_user_info');
       if (stored) userInfo = JSON.parse(stored);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
 
-    const alertMessage = this.buildContactAlertMessage(scenarioMessage, location, impactTimestamp, userInfo);
+    const alertMessage = this.buildContactAlertMessage(
+      scenarioMessage, location, impactTimestamp, userInfo,
+    );
+
     let sent = 0;
     let failed = 0;
-    await Promise.all(
-      contacts.map(async contact => {
-        try {
-          await NativeModules.EmergencyModule.sendEmergencySms(contact.phone, alertMessage);
+
+    if (Platform.OS === 'android' && NativeModules.EmergencyModule?.sendEmergencySms) {
+      // Android: send silently via native SMS module
+      await Promise.all(
+        contacts.map(async contact => {
+          try {
+            await NativeModules.EmergencyModule.sendEmergencySms(contact.phone, alertMessage);
+            sent += 1;
+          } catch {
+            failed += 1;
+          }
+        }),
+      );
+    } else if (Platform.OS === 'ios') {
+      // iOS: open SMS app pre-filled for each contact
+      // (Apple does not allow silent SMS sending — user must tap Send)
+      const { Linking } = require('react-native');
+      for (const contact of contacts) {
+        const encoded = encodeURIComponent(alertMessage);
+        const smsUrl = `sms:${contact.phone}&body=${encoded}`;
+        const canOpen = await Linking.canOpenURL(smsUrl).catch(() => false);
+        if (canOpen) {
+          await Linking.openURL(smsUrl).catch(() => { failed += 1; });
           sent += 1;
-        } catch {
+          // Small gap so iOS doesn't get confused opening multiple SMS urls
+          await new Promise(r => setTimeout(r, 800));
+        } else {
           failed += 1;
         }
-      }),
-    );
+      }
+    }
+
     this.lastContactNotify = { total: contacts.length, sent, failed };
   }
 

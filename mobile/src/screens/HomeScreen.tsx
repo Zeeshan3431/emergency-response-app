@@ -23,6 +23,7 @@ import {
   TextInput,
   Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEmergencyFlow, EmergencyFlowBridge } from '../hooks/useEmergencyFlow';
 import { useEmergency } from '../context/EmergencyContext';
 import { impactDetectionService } from '../services/ImpactDetectionService';
@@ -30,6 +31,7 @@ import { colors } from '../theme/colors';
 import VoiceMicButton from '../components/VoiceMicButton';
 import { contactsService, EmergencyContact } from '../services/ContactsService';
 import { consentService } from '../services/ConsentService';
+import { USER_INFO_KEY, UserInfo } from './OnboardingScreen';
 
 let setupDone = false;
 
@@ -48,6 +50,18 @@ const HomeScreen: React.FC = () => {
   const [newContactName, setNewContactName] = React.useState('');
   const [newContactPhone, setNewContactPhone] = React.useState('');
   const [evidenceConsentEnabled, setEvidenceConsentEnabled] = React.useState(false);
+  const [userInfo, setUserInfo] = React.useState<UserInfo | null>(null);
+
+  // Load saved user info (name, phone, address) for emergency SMS
+  useEffect(() => {
+    const loadUserInfo = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(USER_INFO_KEY);
+        if (raw) setUserInfo(JSON.parse(raw));
+      } catch { /* ignore */ }
+    };
+    loadUserInfo();
+  }, []);
 
   // ── 1. Check if opened from background impact notification ─────────────────
   useEffect(() => {
@@ -239,14 +253,6 @@ const HomeScreen: React.FC = () => {
           </Text>
         </View>
       </View>
-
-      {Platform.OS === 'ios' && (
-        <View style={styles.warningNotice}>
-          <Text style={styles.noticeText}>
-            ⚠️ On iOS, impact detection only works while the app is open.
-          </Text>
-        </View>
-      )}
 
       {Platform.OS === 'android' && sensorActive && (
         <View style={styles.successNotice}>

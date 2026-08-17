@@ -1,17 +1,14 @@
 /**
- * AppNavigator.tsx — Updated with iOS disclosure screen
+ * AppNavigator.tsx
  */
 
 import React from 'react';
-import { Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { EmergencyProvider } from '../context/EmergencyContext';
 import HomeScreen from '../screens/HomeScreen';
 import ConfirmationScreen from '../screens/ConfirmationScreen';
 import EmergencyActiveScreen from '../screens/EmergencyActiveScreen';
-import IOSDisclosureScreen from '../screens/IOSDisclosureScreen';
-
 import OnboardingScreen from '../screens/OnboardingScreen';
 
 export type RootStackParamList = {
@@ -19,7 +16,6 @@ export type RootStackParamList = {
   Home: undefined;
   Confirmation: undefined;
   EmergencyActive: undefined;
-  IOSDisclosure: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -44,14 +40,7 @@ const AppNavigator: React.FC = () => {
             options={{ animation: 'fade' }}
           />
 
-          {/* iOS-only: limitation disclosure screen */}
-          {Platform.OS === 'ios' && (
-            <Stack.Screen
-              name="IOSDisclosure"
-              component={IOSDisclosureScreen}
-              options={{ animation: 'fade' }}
-            />
-          )}
+
 
           <Stack.Screen name="Home" component={HomeScreen} />
 
